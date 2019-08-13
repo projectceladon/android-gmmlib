@@ -44,6 +44,7 @@ typedef struct GMM_RESOURCE_FLAG_REC
     {
         uint32_t CameraCapture             : 1; // Camera Capture Buffer flag to be registered with DXGK for Camera Child VRAM buffer sharing
         uint32_t CCS                       : 1; // Color Control Surface (Gen9+ for MSAA Compression or Non-MSAA Fast Color Clear) + Apply CCS restrictions when padding/aligning this resource (see GmmRestrictions.c)
+        uint32_t ColorDiscard              : 1; // Tile-pass color discard
         uint32_t ColorSeparation           : 1; // Color Separated surface (Sakura display), surface scanned out as 16bpp
         uint32_t ColorSeparationRGBX       : 1; // Color Separated surface (Sakura display), surface scanned out as 24bpp (stored as 32bpp)
         uint32_t Constant                  : 1;
@@ -86,14 +87,14 @@ typedef struct GMM_RESOURCE_FLAG_REC
         uint32_t __MsaaTileMcs             : 1; // Internal GMM flag--Clients don't set.
         uint32_t __NonMsaaLinearCCS        : 1; // Internal GMM flag--Clients don't set.
 
-        uint32_t __Remaining               : 21;// Defining rather than letting float for the two zero-and-memcmp we do with the .Gpu struct (in case ={0} doesn't zero unnamed fields).
+        uint32_t __Remaining               : 20;// Defining rather than letting float for the two zero-and-memcmp we do with the .Gpu struct (in case ={0} doesn't zero unnamed fields).
     } Gpu;
 
     // Info: Used to specify preferences at surface creation time
     struct
     {
         uint32_t AllowVirtualPadding       : 1;
-        uint32_t ApertureOnly              : 1;
+        uint32_t ApertureOnly              : 1; // Renaming ApertureOnly to NonLocalOnly, Will remove once all clients are moved to NonLocalOnly.
         uint32_t BigPage                   : 1;
         uint32_t Cacheable                 : 1;
         uint32_t ContigPhysMemoryForiDART  : 1; // iDART clients only; resource allocation must be physically contiguous.
@@ -107,11 +108,13 @@ typedef struct GMM_RESOURCE_FLAG_REC
         uint32_t LayoutBelow               : 1; // Indicates the orientation of MIP data in the buffer. This is the surviving option and may be inferred as the default.
         uint32_t LayoutMono                : 1; // Legacy, deprecated MIP layout. Used for internal debugging.
         uint32_t LayoutRight               : 1; // Legacy, deprecated MIP layout.
+        uint32_t LocalOnly                 : 1;
         uint32_t Linear                    : 1; // (non-)tiling preference for the allocation. (lowest priority) Y>X>W>L. See GmmLib::GmmTextureCalc::SetTileMode()
         uint32_t MediaCompressed           : 1;
         uint32_t NoOptimizationPadding     : 1; // don't swell size for sake of 64KB pages - FtrWddm2_1_64kbPages
         uint32_t NoPhysMemory              : 1; // KMD Gfx Client Submission. Client miniport drivers may want to map their physical pages to Gfx memory space instead of allocating Gfx physical memory.
         uint32_t NotLockable               : 1; // Resource is GPU-exclusive and shall not be reference by the CPU. Relevant to memory allocation components as an optimisation opportunity for mapping buffers in CPU-side.
+        uint32_t NonLocalOnly              : 1;
         uint32_t StdSwizzle                : 1; // Standard Swizzle (YS) support on SKL+
         uint32_t PseudoStdSwizzle          : 1; // Only applicable to D3D12+ UMD's, for special-case of limited Standard Swizzle (YS) support on HSW/BDW/CHV.
         uint32_t Undefined64KBSwizzle      : 1; // Only applicable if system doesn't support StdSwizzle (i.e. Pre-Gen9). If set, surface is using one of the INTEL_64KB_UNDEFINED_* swizzles.

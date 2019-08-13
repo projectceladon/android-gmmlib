@@ -37,112 +37,94 @@ void GmmLib::GmmTextureCalc::SetTileMode(GMM_TEXTURE_INFO *pTexInfo)
 
     pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
 
-    if(pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs)
+    if(pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags))
     {
 // clang-format off
-        #define SET_TILE_MODE(Submode)                                      \
-            pTexInfo->TileMode =                                            \
-                (pTexInfo->BitsPerPixel == 128) ? TILE_##Submode##_128bpe : \
-                (pTexInfo->BitsPerPixel ==  64) ? TILE_##Submode##_64bpe  : \
-                (pTexInfo->BitsPerPixel ==  32) ? TILE_##Submode##_32bpe  : \
-                (pTexInfo->BitsPerPixel ==  16) ? TILE_##Submode##_16bpe  : \
-                                                  TILE_##Submode##_8bpe; \
-        // clang-format on
+        #define SET_TILE_MODE(Tile, Submode)                                                \
+        {                                                                                   \
+                pTexInfo->TileMode =                                                        \
+                    (pTexInfo->BitsPerPixel == 128) ? TILE_##Tile##_##Submode##_128bpe :    \
+                    (pTexInfo->BitsPerPixel ==  64) ? TILE_##Tile##_##Submode##_64bpe  :    \
+                    (pTexInfo->BitsPerPixel ==  32) ? TILE_##Tile##_##Submode##_32bpe  :    \
+                    (pTexInfo->BitsPerPixel ==  16) ? TILE_##Tile##_##Submode##_16bpe  :    \
+                                                      TILE_##Tile##_##Submode##_8bpe;       \
+        }                                                                                   \
 
+        #define GENERATE_TILE_MODE(T, M1d, M2d, M2d_2x, M2d_4x, M2d_8x, M2d_16x, M3d)            \
+        {\
+            switch (pTexInfo->Type)\
+            {\
+                case RESOURCE_1D:\
+                    SET_TILE_MODE(T, M1d);\
+                    break;\
+                case RESOURCE_2D:\
+                case RESOURCE_CUBE:\
+                    switch (pTexInfo->MSAA.NumSamples)\
+                    {\
+                    case 1:\
+                        SET_TILE_MODE(T, M2d);\
+                        break;\
+                    case 2:\
+                        SET_TILE_MODE(T, M2d_2x);\
+                        break;\
+                    case 4:\
+                        SET_TILE_MODE(T, M2d_4x);\
+                        break;\
+                    case 8:\
+                        SET_TILE_MODE(T, M2d_8x);\
+                        break;\
+                    case 16:\
+                        SET_TILE_MODE(T, M2d_16x);\
+                        break;\
+                    default:\
+                        __GMM_ASSERT(0);\
+                    }\
+                    break;\
+                case RESOURCE_3D:\
+                    SET_TILE_MODE(T, M3d);\
+                    break;\
+                default:\
+                    __GMM_ASSERT(0);\
+            }\
+        }
+
+
+        // clang-format on
         if(pTexInfo->Flags.Info.TiledYf)
         {
-            switch(pTexInfo->Type)
-            {
-                case RESOURCE_1D:
-                    SET_TILE_MODE(YF_1D);
-                    break;
-                case RESOURCE_2D:
-                case RESOURCE_CUBE:
-                    switch(pTexInfo->MSAA.NumSamples)
-                    {
-                        case 1:
-                            SET_TILE_MODE(YF_2D);
-                            break;
-                        case 2:
-                            SET_TILE_MODE(YF_2D_2X);
-                            break;
-                        case 4:
-                            SET_TILE_MODE(YF_2D_4X);
-                            break;
-                        case 8:
-                            SET_TILE_MODE(YF_2D_8X);
-                            break;
-                        case 16:
-                            SET_TILE_MODE(YF_2D_16X);
-                            break;
-                        default:
-                            __GMM_ASSERT(0);
-                    }
-                    break;
-                case RESOURCE_3D:
-                    SET_TILE_MODE(YF_3D);
-                    break;
-                default:
-                    __GMM_ASSERT(0);
-            }
+            GENERATE_TILE_MODE(YF, 1D, 2D, 2D_2X, 2D_4X, 2D_8X, 2D_16X, 3D);
+
             pTexInfo->Flags.Info.TiledYf = 1;
             pTexInfo->Flags.Info.TiledYs = 0;
         }
         else
         {
-            switch(pTexInfo->Type)
+            if(pGmmGlobalContext->GetSkuTable().FtrTileY)
             {
-                case RESOURCE_1D:
-                    SET_TILE_MODE(YS_1D);
-                    break;
-                case RESOURCE_2D:
-                case RESOURCE_CUBE:
-                    switch(pTexInfo->MSAA.NumSamples)
-                    {
-                        case 1:
-                            SET_TILE_MODE(YS_2D);
-                            break;
-                        case 2:
-                            SET_TILE_MODE(YS_2D_2X);
-                            break;
-                        case 4:
-                            SET_TILE_MODE(YS_2D_4X);
-                            break;
-                        case 8:
-                            SET_TILE_MODE(YS_2D_8X);
-                            break;
-                        case 16:
-                            SET_TILE_MODE(YS_2D_16X);
-                            break;
-                        default:
-                            __GMM_ASSERT(0);
-                    }
-                    break;
-                case RESOURCE_3D:
-                    SET_TILE_MODE(YS_3D);
-                    break;
-                default:
-                    __GMM_ASSERT(0);
+                GENERATE_TILE_MODE(YS, 1D, 2D, 2D_2X, 2D_4X, 2D_8X, 2D_16X, 3D);
             }
+
             pTexInfo->Flags.Info.TiledYf = 0;
-            pTexInfo->Flags.Info.TiledYs = 1;
+            GMM_SET_64KB_TILE(pTexInfo->Flags, 1);
         }
 
-        pTexInfo->Flags.Info.TiledY = 1;
+
+        GMM_SET_4KB_TILE(pTexInfo->Flags, pGmmGlobalContext->GetSkuTable().FtrTileY ? 1 : 0);
+
         pTexInfo->Flags.Info.TiledX = 0;
         pTexInfo->Flags.Info.TiledW = 0;
         pTexInfo->Flags.Info.Linear = 0;
 #undef SET_TILE_MODE
     }
-    else if(pTexInfo->Flags.Info.TiledY)
+    else if(GMM_IS_4KB_TILE(pTexInfo->Flags))
     {
-        pTexInfo->Flags.Info.TiledY  = 1;
+        GMM_SET_4KB_TILE(pTexInfo->Flags, 1);
         pTexInfo->Flags.Info.TiledYf = 0;
         pTexInfo->Flags.Info.TiledYs = 0;
         pTexInfo->Flags.Info.TiledX  = 0;
         pTexInfo->Flags.Info.TiledW  = 0;
         pTexInfo->Flags.Info.Linear  = 0;
-        pTexInfo->TileMode           = LEGACY_TILE_Y;
+        GMM_SET_4KB_TILE_MODE(pTexInfo->TileMode);
     }
     else if(pTexInfo->Flags.Info.TiledX)
     {
@@ -440,7 +422,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
 
         if(pTexInfo->Flags.Info.RenderCompressed || pTexInfo->Flags.Info.MediaCompressed)
         {
-            if(!pTexInfo->Flags.Info.TiledYs) //Ys is naturally aligned to required 4 YF pages
+            if(!GMM_IS_64KB_TILE(pTexInfo->Flags)) //Ys is naturally aligned to required 4 YF pages
             {
                 // Align Pitch to 4-tile boundary
                 WidthBytesPhysical = GFX_ALIGN(WidthBytesPhysical,
@@ -463,11 +445,8 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
                                      pBufferType->RenderPitchAlignment);
 
         // Media Memory Compression : Allocate one memory tile wider than is required...
-        if(pTexInfo->Flags.Gpu.MMC && !pTexInfo->Flags.Gpu.UnifiedAuxSurface && GFX_GET_CURRENT_RENDERCORE(pPlatform->Platform) <= IGFX_GEN11_CORE)
-        {
-            WidthBytesRender += pPlatform->TileInfo[pTexInfo->TileMode].LogicalTileWidth;
-            WidthBytesPhysical = WidthBytesLock = WidthBytesRender;
-        }
+        pGmmGlobalContext->GetTextureCalc()->AllocateOneTileThanRequied(pTexInfo, WidthBytesRender,
+                                                                        WidthBytesPhysical, WidthBytesLock);
 
         // check if locking a particular suface need to be power 2 or not
         if(pBufferType->NeedPow2LockAlignment)
@@ -688,7 +667,7 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
                 Size *= pPlatform->TileInfo[pTexInfo->TileMode].LogicalTileDepth;
             }
 
-            if((pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) &&
+            if((pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) &&
                (pTexInfo->MSAA.NumSamples > 1) &&
                (pTexInfo->Flags.Gpu.Depth == 0 && pTexInfo->Flags.Gpu.SeparateStencil == 0))
             {
@@ -696,7 +675,10 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexPitchAndSize(GMM_TEXTURE_INFO * pTexIn
                 // The width/height for TileYf/Ys MSAA surfaces are not expanded (using GmmExpandWidth/Height functions)
                 // because pitch for these surfaces is in their non-expanded dimensions. So, the pitch
                 // is also non-expanded units.  That's why, we multiply by the sample size here to get the correct size.
-                Size *= pTexInfo->MSAA.NumSamples;
+                if(pGmmGlobalContext->GetSkuTable().FtrTileY)
+                {
+                    Size *= pTexInfo->MSAA.NumSamples;
+                }
             }
 
             if((pTexInfo->Flags.Info.TiledY && pTexInfo->Flags.Gpu.TiledResource))
@@ -1344,6 +1326,18 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::FillTexPlanar(GMM_TEXTURE_INFO * 
         pTexInfo->Flags.Info.RedecribedPlanes = 1;
     }
 
+    //Special case LKF MMC compressed surfaces
+    if(pTexInfo->Flags.Gpu.MMC &&
+       pTexInfo->Flags.Gpu.UnifiedAuxSurface &&
+       pTexInfo->Flags.Info.TiledY)
+    {
+        uint32_t TileHeight = pGmmGlobalContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileHeight;
+        uint32_t TileWidth  = pGmmGlobalContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileWidth;
+
+        Height = GFX_ALIGN(YHeight, TileHeight) + GFX_ALIGN(VHeight, TileHeight);
+    }
+
+    // Vary wide planar tiled planar formats do not support MMC pre gen11. All formats do not support
     // MMC above 16k bytes wide, while Yf NV12 does not support above 8k - 128 bytes.
     if((GFX_GET_CURRENT_RENDERCORE(pPlatform->Platform) <= IGFX_GEN10_CORE) &&
        (pTexInfo->Flags.Info.TiledY || pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs))
@@ -1456,4 +1450,164 @@ GMM_STATUS GmmLib::GmmTextureCalc::FillTexBlockMem(GMM_TEXTURE_INFO * pTexInfo,
 
     GMM_DPF_EXIT;
     return (Status);
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// This function does any special-case conversion from client-provided pseudo creation
+/// parameters to actual parameters for CCS.
+///
+/// @param[in]  pTexInfo: Reference to ::GMM_TEXTURE_INFO
+///
+///  @return     ::GMM_STATUS
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_STATUS GMM_STDCALL GmmLib::GmmTextureCalc::MSAACCSUsage(GMM_TEXTURE_INFO *pTexInfo)
+{
+    GMM_STATUS Status = GMM_SUCCESS;
+    //const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+
+    if(pTexInfo->MSAA.NumSamples > 1) // CCS for MSAA Compression
+    {
+        Status = MSAACompression(pTexInfo);
+    }
+    else // Non-MSAA CCS Use (i.e. Render Target Fast Clear)
+    {
+        if(!pTexInfo->Flags.Info.TiledW &&
+           ((!pTexInfo->Flags.Info.Linear) ||
+            (GMM_IS_4KB_TILE(pTexInfo->Flags) || GMM_IS_64KB_TILE(pTexInfo->Flags) ||
+             (pTexInfo->Type == RESOURCE_BUFFER && pTexInfo->Flags.Info.Linear))) && //!Yf - deprecate Yf
+           ((pTexInfo->MaxLod == 0) &&
+            (pTexInfo->ArraySize <= 1)) &&
+           (((pTexInfo->BitsPerPixel == 32) ||
+             (pTexInfo->BitsPerPixel == 64) ||
+             (pTexInfo->BitsPerPixel == 128))))
+        {
+            // For non-MSAA CCS usage, the four tables of
+            // requirements:
+            // (1) RT Alignment (GMM Don't Care: Occurs Naturally)
+            // (2) ClearRect Alignment
+            // (3) ClearRect Scaling (GMM Don't Care: GHAL3D Matter)
+            // (4) Non-MSAA CCS Sizing
+
+            // Gen8+:
+            // Since mip-mapped and arrayed surfaces are supported, we
+            // deal with alignment later at per mip level. Here, we set
+            // tiling type only. TileX is not supported on Gen9+.
+            // Pre-Gen8:
+            // (!) For all the above, there are separate entries for
+            // 32/64/128bpp--and then deals with PIXEL widths--Here,
+            // though, we will unify by considering 8bpp table entries
+            // (unlisted--i.e. do the math)--and deal with BYTE widths.
+
+            // (1) RT Alignment -- The surface width and height don't
+            // need to be padded to RT CL granularity. On HSW, all tiled
+            // RT's will have appropriate alignment (given 4KB surface
+            // base and no mip-map support) and appropriate padding
+            // (due to tile padding). On BDW+, GMM uses H/VALIGN that
+            // will guarantee the MCS RT alignment for all subresources.
+
+            // (2) ClearRect Alignment -- I.e. FastClears must be done
+            // with certain granularity:
+            //  TileY:  512 Bytes x 128 Lines
+            //  TileX: 1024 Bytes x  64 Lines
+            // So a CCS must be sized to match that granularity (though
+            // the RT itself need not be fully padded to that
+            // granularity to use FastClear).
+
+            // (4) Non-MSAA CCS Sizing -- CCS sizing is based on the
+            // size of the FastClear (with granularity padding) for the
+            // paired RT. CCS's (byte widths and heights) are scaled
+            // down from their RT's by:
+            //  TileY: 32 x 32
+            //  TileX: 64 x 16
+
+            // ### Example #############################################
+            // RT:         800x600, 32bpp, TileY
+            // 8bpp:      3200x600
+            // FastClear: 3584x640 (for TileY FastClear Granularity of 512x128)
+            // CCS:       112x20 (for TileY RT:CCS Sizing Downscale of 32x32)
+
+            uint32_t AlignmentFactor = pGmmGlobalContext->GetWaTable().WaDoubleFastClearWidthAlignment ? 2 : 1;
+
+            pTexInfo->BaseWidth    = pTexInfo->BaseWidth * pTexInfo->BitsPerPixel / 8;
+            pTexInfo->BitsPerPixel = 8;
+            pTexInfo->Format       = GMM_FORMAT_R8_UINT;
+
+            if(GMM_IS_4KB_TILE(pTexInfo->Flags)) //-------- Fast Clear Granularity
+            {                                    //                       /--- RT:CCS Sizing Downscale
+                pTexInfo->BaseWidth  = GFX_ALIGN(pTexInfo->BaseWidth, 512 * AlignmentFactor) / 32;
+                pTexInfo->BaseHeight = GFX_ALIGN(pTexInfo->BaseHeight, 128) / 32;
+            }
+            else //if(pTexInfo->Flags.Info.TiledX)
+            {
+                pTexInfo->BaseWidth  = GFX_ALIGN(pTexInfo->BaseWidth, 1024 * AlignmentFactor) / 64;
+                pTexInfo->BaseHeight = GFX_ALIGN(pTexInfo->BaseHeight, 64) / 16;
+            }
+        }
+        else
+        {
+            GMM_ASSERTDPF(0, "Illegal CCS creation parameters!");
+            Status = GMM_ERROR;
+        }
+    }
+    return Status;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// This function does any special-case conversion from client-provided pseudo creation
+/// parameters to actual parameters for CCS for MSAA Compression.
+///
+/// @param[in]  pTexInfo: Reference to ::GMM_TEXTURE_INFO
+///
+///  @return     ::GMM_STATUS
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_STATUS GmmLib::GmmTextureCalc::MSAACompression(GMM_TEXTURE_INFO *pTexInfo)
+{
+    GMM_STATUS Status = GMM_SUCCESS;
+
+    if((pTexInfo->MSAA.NumSamples == 2) || (pTexInfo->MSAA.NumSamples == 4))
+    {
+        pTexInfo->BitsPerPixel = 8;
+        pTexInfo->Format       = GMM_FORMAT_R8_UINT;
+    }
+    else if(pTexInfo->MSAA.NumSamples == 8)
+    {
+        pTexInfo->BitsPerPixel = 32;
+        pTexInfo->Format       = GMM_FORMAT_R32_UINT;
+    }
+    else //if(pTexInfo->MSAA.NumSamples == 16)
+    {
+        pTexInfo->BitsPerPixel = 64;
+        pTexInfo->Format       = GMM_FORMAT_GENERIC_64BIT;
+    }
+
+    if((Status = __GmmTexFillHAlignVAlign(pTexInfo)) != GMM_SUCCESS) // Need to get our alignment (matching RT) before overwriting our RT's MSAA setting.
+    {
+        return Status;
+    }
+    pTexInfo->MSAA.NumSamples         = 1; // CCS itself isn't MSAA'ed.
+    pTexInfo->Flags.Gpu.__MsaaTileMcs = 1;
+
+    return Status;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+///Allocate one memory tile wider than is required for Media Memory Compression
+///
+/// @param[in]  See function definition.
+///
+/// @return     ::
+/////////////////////////////////////////////////////////////////////////////////////
+void GMM_STDCALL GmmLib::GmmTextureCalc::AllocateOneTileThanRequied(GMM_TEXTURE_INFO *pTexInfo,
+                                                                    GMM_GFX_SIZE_T &  WidthBytesRender,
+                                                                    GMM_GFX_SIZE_T &  WidthBytesPhysical,
+                                                                    GMM_GFX_SIZE_T &  WidthBytesLock)
+{
+    const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
+
+    if(pTexInfo->Flags.Gpu.MMC && !pTexInfo->Flags.Gpu.UnifiedAuxSurface)
+    {
+        WidthBytesRender += pPlatform->TileInfo[pTexInfo->TileMode].LogicalTileWidth;
+        WidthBytesPhysical = WidthBytesLock = WidthBytesRender;
+    }
 }

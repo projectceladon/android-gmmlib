@@ -85,43 +85,12 @@ namespace GmmLib
             /* Function prototypes */
             GMM_VIRTUAL bool                IsPresentableformat();
             // Move GMM Restrictions to it's own class?
-            GMM_VIRTUAL void                GetGenericRestrictions(__GMM_BUFFER_TYPE *pBuff);
-            GMM_VIRTUAL __GMM_BUFFER_TYPE*  GetBestRestrictions(__GMM_BUFFER_TYPE *pFirstBuffer, const __GMM_BUFFER_TYPE *pSecondBuffer);
             virtual bool        CopyClientParams(GMM_RESCREATE_PARAMS &CreateParams);
             GMM_VIRTUAL bool                RedescribePlanes();
             GMM_VIRTUAL bool                ReAdjustPlaneProperties(bool IsAuxSurf);
             GMM_VIRTUAL const GMM_PLATFORM_INFO& GetPlatformInfo();
 
-            /* Inline functions */
-            /////////////////////////////////////////////////////////////////////////////////////
-            /// Checks where the restrictions are invalid or not
-            /// @param[in]  pRestriction Restrictions to check
-            /// @return     true if restriction is invalid. false otherwise.
-            /////////////////////////////////////////////////////////////////////////////////////
-            GMM_INLINE_VIRTUAL GMM_INLINE bool IsRestrictionInvalid(__GMM_BUFFER_TYPE *pRestriction)
-            {
-                return ((pRestriction->MinDepth == 0xffffffff) ? true : false);
-            }
-
-            /////////////////////////////////////////////////////////////////////////////////////
-            /// Returns restrictions for a linear buffer.
-            /// @param[out]     pBuff Restrictions are returned in this buffer
-            /////////////////////////////////////////////////////////////////////////////////////
-            GMM_INLINE_VIRTUAL GMM_INLINE void GetLinearRestrictions(__GMM_BUFFER_TYPE* pBuff)
-            {
-                *pBuff = GMM_OVERRIDE_PLATFORM_INFO(&Surf)->Linear;
-            }
-
-            /////////////////////////////////////////////////////////////////////////////////////
-            /// Returns restrictions for the primary buffer.
-            /// @param[out]     pBuff Restrictions are returned in this buffer
-            /////////////////////////////////////////////////////////////////////////////////////
-            GMM_INLINE_VIRTUAL GMM_INLINE void GetPrimaryRestrictions(__GMM_BUFFER_TYPE* pBuff)
-            {
-                *pBuff = GMM_OVERRIDE_PLATFORM_INFO(&Surf)->ASyncFlipSurface;
-            }
-
-        public:
+    public:
             /* Constructors */
             GmmResourceInfoCommon():
                 ClientType(),
@@ -203,6 +172,7 @@ namespace GmmLib
             GMM_VIRTUAL void                    GMM_STDCALL GetTiledResourceMipPacking(uint32_t *pNumPackedMips,
                                                                            uint32_t *pNumTilesForPackedMips);
             GMM_VIRTUAL uint32_t                GMM_STDCALL GetPackedMipTailStartLod();
+            GMM_VIRTUAL bool                    GMM_STDCALL IsMipRCCAligned(uint8_t &MisAlignedLod);
             GMM_VIRTUAL uint8_t                 GMM_STDCALL GetDisplayFastClearSupport();
             GMM_VIRTUAL uint8_t                 GMM_STDCALL GetDisplayCompressionSupport();
             GMM_VIRTUAL uint32_t                GMM_STDCALL GetCompressionBlockWidth();
@@ -387,7 +357,7 @@ namespace GmmLib
             {
                 const GMM_PLATFORM_INFO   *pPlatform;
 
-                 pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
 
                 if (Surf.Flags.Gpu.UnifiedAuxSurface)
                 {
@@ -465,7 +435,7 @@ namespace GmmLib
                 TileMode = Surf.TileMode;
                 __GMM_ASSERT(TileMode < GMM_TILE_MODES);
 
-                 pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
                 if (pPlatform->TileInfo[TileMode].LogicalTileWidth != 0)
                 {
                     // In case of Depth/Stencil buffer MSAA TileYs surface, the LogicalTileWidth/Height is smaller than non-MSAA ones
@@ -473,7 +443,7 @@ namespace GmmLib
                     uint32_t MSAASpecialFactorForDepthAndStencil = 1;
 
                     if ((Surf.Flags.Gpu.Depth || Surf.Flags.Gpu.SeparateStencil) &&
-                         (Surf.MSAA.NumSamples > 1 && (Surf.Flags.Info.TiledYs || Surf.Flags.Info.TiledYf)))
+                         (Surf.MSAA.NumSamples > 1 && (GMM_IS_64KB_TILE(Surf.Flags) || Surf.Flags.Info.TiledYf)))
                     {
                         switch (Surf.MSAA.NumSamples)
                         {
@@ -523,7 +493,7 @@ namespace GmmLib
 
                 __GMM_ASSERT(!AuxSurf.Flags.Info.Linear);
 
-                 pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&AuxSurf);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&AuxSurf);
 
                 if (Surf.Flags.Gpu.UnifiedAuxSurface)
                 {
@@ -788,7 +758,7 @@ namespace GmmLib
                 pPlatformResource = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
 
                 if ((GFX_GET_CURRENT_RENDERCORE(pPlatformResource->Platform) >= IGFX_GEN9_CORE) &&
-                    !(Surf.Flags.Info.TiledYf || Surf.Flags.Info.TiledYs))
+                    !(Surf.Flags.Info.TiledYf || GMM_IS_64KB_TILE(Surf.Flags)))
                 {
                     HAlign = Surf.Alignment.HAlign / GetCompressionBlockWidth();
                 }
@@ -811,7 +781,7 @@ namespace GmmLib
                 pPlatformResource = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
 
                 if ((GFX_GET_CURRENT_RENDERCORE(pPlatformResource->Platform) >= IGFX_GEN9_CORE) &&
-                    !(GetResFlags().Info.TiledYf || GetResFlags().Info.TiledYs))
+                    !(GetResFlags().Info.TiledYf || GMM_IS_64KB_TILE(GetResFlags())))
                 {
                     VAlign = Surf.Alignment.VAlign / GetCompressionBlockHeight();
                 }
@@ -932,6 +902,40 @@ namespace GmmLib
             };
 
             /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns size of the surface depending on the surface parameters.
+            /// @return     Size of surface
+            ///
+            /// Below legacy API to query surface size are deprecated and will be removed in
+            /// later gmm releases. Client must move to unified GetSize() api.
+            ///  - GmmResGetSizeSurface()/ pResInfo->GetSizeSurface()
+            ///  - GmmResGetSizeMainSurface()/  pResInfo->GetSizeAllocation()
+            ///  - GmmResGetSizeAllocation()/ pResInfo->GetSizeMainSurface()
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T  GMM_STDCALL GetSize(GMM_SIZE_PARAM GmmSizeParam)
+            {
+                GMM_GFX_SIZE_T Size = 0;
+                switch (GmmSizeParam)
+                {
+                    case GMM_MAIN_SURF:
+                        Size =  Surf.Size;
+                        break;
+                    case GMM_MAIN_PLUS_AUX_SURF:
+                        Size =  Surf.Size + AuxSurf.Size + AuxSecSurf.Size;
+                        break;
+                    case GMM_TOTAL_SURF:
+                        Size = Surf.Size + AuxSurf.Size + AuxSecSurf.Size;
+                        if (Is64KBPageSuitable())
+                        {
+                            Size = GFX_ALIGN(Surf.Size + AuxSurf.Size + AuxSecSurf.Size, GMM_KBYTE(64));
+                        }
+                        break;
+                    default:
+                        __GMM_ASSERT(0);
+                }
+                return Size;
+            }
+
+            /////////////////////////////////////////////////////////////////////////////////////
             /// Returns size of the main surface only. Aux surface size not included.
             /// @return     Size of main surface
             /////////////////////////////////////////////////////////////////////////////////////
@@ -958,10 +962,9 @@ namespace GmmLib
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED GMM_GFX_SIZE_T  GMM_STDCALL GetSizeAllocation()
             {
-                #define ALIGN_SIZE(x, a)  (((x) + ((a) - 1)) - (((x) + ((a) - 1)) & ((a) - 1)))
                 if (Is64KBPageSuitable())
-                {
-                    return(ALIGN_SIZE(Surf.Size + AuxSurf.Size + AuxSecSurf.Size, GMM_KBYTE(64)));
+                { 
+                    return(GFX_ALIGN(Surf.Size + AuxSurf.Size + AuxSecSurf.Size, GMM_KBYTE(64)));
                 }
                 else
                 {
@@ -975,7 +978,7 @@ namespace GmmLib
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t  GMM_STDCALL GetMaxGpuVirtualAddressBits()
             {
-                 const GMM_PLATFORM_INFO *pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                const GMM_PLATFORM_INFO *pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
                 __GMM_ASSERTPTR(pPlatform, 0);
 
                 return pPlatform->MaxGpuVirtualAddressBitsPerResource;
@@ -1017,7 +1020,7 @@ namespace GmmLib
                             Offset = Surf.Size + AuxSurf.OffsetInfo.Plane.X[GMM_PLANE_Y];
                         }
                     }
-                    else if ((GmmAuxType == GMM_AUX_CC) && Surf.Flags.Gpu.IndirectClearColor)
+                    else if ((GmmAuxType == GMM_AUX_CC) && (Surf.Flags.Gpu.IndirectClearColor || Surf.Flags.Gpu.ColorDiscard))
                     {
                         Offset = Surf.Size + AuxSurf.UnpaddedSize;
                     }
@@ -1038,6 +1041,12 @@ namespace GmmLib
                         Surf.Flags.Gpu.HiZ)
                 {
                     Offset = Surf.Size - GMM_HIZ_CLEAR_COLOR_SIZE;
+                }
+                else if (GmmAuxType == GMM_AUX_CC &&
+                    Surf.Flags.Gpu.ColorDiscard &&
+                    !Surf.Flags.Gpu.CCS)
+                {
+                    Offset = Surf.Size;
                 }
                 else
                 {
@@ -1124,6 +1133,22 @@ namespace GmmLib
                 }
 
                 return IsEncrypted;
+            }
+
+            /////////////////////////////////////////////////////////////////////////
+            /// This function returns or sets the value of the Cp surface tag
+            /// associated with the given GMM resource within same process.
+            /// @param[in]  IsSet: true for updating tag in gmm
+            /// @param[in]  CpTag: Cp surface tag value
+            /// @return     current cp surface tag in gmm
+            /////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE uint32_t GMM_STDCALL GetSetCpSurfTag(uint8_t IsSet, uint32_t CpTag)
+            {
+                if (IsSet)
+                {
+                    Surf.CpTag = CpTag;
+                }
+                return Surf.CpTag;
             }
 
             /////////////////////////////////////////////////////////////////////////
@@ -1254,16 +1279,16 @@ namespace GmmLib
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL GetHAlignSurfaceState()
             {
-                uint32_t               HAlign;
+                uint32_t               HAlign = 0;
                 const GMM_PLATFORM_INFO   *pPlatform;
 
                 pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
 
                 if (GFX_GET_CURRENT_RENDERCORE(pPlatform->Platform) >= IGFX_GEN8_CORE)
                 {
-                    if (GetResFlags().Info.TiledYf || GetResFlags().Info.TiledYs)
+                    if (GetResFlags().Info.TiledYf || GMM_IS_64KB_TILE(GetResFlags()))
                     {
-                        HAlign = 0;
+                        HAlign = 1; //Ignored, but we'll retrun valid encoding nonetheless.
                     }
                     else
                     {
@@ -1272,7 +1297,7 @@ namespace GmmLib
                             case 4:  HAlign = 1; break;
                             case 8:  HAlign = 2; break;
                             case 16: HAlign = 3; break;
-                            default: HAlign = 0; __GMM_ASSERT(0);
+                            default: HAlign = 1;
                         }
                     }
                 }
@@ -1298,13 +1323,13 @@ namespace GmmLib
                 uint32_t               VAlign;
                 const GMM_PLATFORM_INFO   *pPlatform;
 
-                 pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
+                pPlatform = (GMM_PLATFORM_INFO *)GMM_OVERRIDE_EXPORTED_PLATFORM_INFO(&Surf);
 
                 if (GFX_GET_CURRENT_RENDERCORE(pPlatform->Platform) >= IGFX_GEN8_CORE)
                 {
-                    if (GetResFlags().Info.TiledYf || GetResFlags().Info.TiledYs)
+                    if (GetResFlags().Info.TiledYf || GMM_IS_64KB_TILE(GetResFlags()))
                     {
-                        VAlign = 0;
+                        VAlign = 1; // Ignored , but we'll return valid encoding nonetheless.
                     }
                     else
                     {
@@ -1313,7 +1338,7 @@ namespace GmmLib
                             case 4:  VAlign = 1; break;
                             case 8:  VAlign = 2; break;
                             case 16: VAlign = 3; break;
-                            default: VAlign = 0; __GMM_ASSERT(0);
+                            default: VAlign = 1;
                         }
                     }
                 }
@@ -1330,25 +1355,51 @@ namespace GmmLib
                 return VAlign;
             }
 
+
+            /////////////////////////////////////////////////////////////////////////////////////
+            /// Returns tile mode for SURFACE_STATE programming.
+            /// @return     Tiled Mode
+            /////////////////////////////////////////////////////////////////////////////////////
+            GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL GetTileModeSurfaceState()
+            {
+                uint32_t   TiledMode = 0;
+
+                TiledMode =
+                    Surf.Flags.Info.Linear ? 0 :
+                        Surf.Flags.Info.TiledX ? 2 :
+                        /* Y/YF/YS */       3;
+
+                __GMM_ASSERT((TiledMode != 3) || (Surf.Flags.Info.TiledY || Surf.Flags.Info.TiledYf || Surf.Flags.Info.TiledYs));
+
+                return TiledMode;
+            }
+
             /////////////////////////////////////////////////////////////////////////////////////
             /// Returns tiled resource mode for SURFACE_STATE programming.
             /// @return     Tiled Resource Mode
             /////////////////////////////////////////////////////////////////////////////////////
             GMM_INLINE_VIRTUAL GMM_INLINE_EXPORTED uint32_t GMM_STDCALL GetTiledResourceModeSurfaceState()
             {
-                uint32_t   TiledResourceMode;
+                uint32_t   TiledResourceMode = 0;
 
-                if (Surf.Flags.Info.TiledYf)
+                if(GMM_IS_TILEY)
                 {
-                    TiledResourceMode = 1;
-                }
-                else if (Surf.Flags.Info.TiledYs)
-                {
-                    TiledResourceMode = 2;
+                    if (Surf.Flags.Info.TiledYf)
+                    {
+                        TiledResourceMode = 1;
+                    }
+                    else if (Surf.Flags.Info.TiledYs)
+                    {
+                        TiledResourceMode = 2;
+                    }
+                    else
+                    {
+                        TiledResourceMode = 0;
+                    }
                 }
                 else
                 {
-                    TiledResourceMode = 0;
+                    __GMM_ASSERT(0);
                 }
 
                 return TiledResourceMode;

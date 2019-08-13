@@ -24,7 +24,6 @@ OTHER DEALINGS IN THE SOFTWARE.
 // GmmConst.h needed for GMM_MAX_NUMBER_MOCS_INDEXES
 #include "GmmConst.h"
 #include "../../../Platform/GmmPlatforms.h"
-#include "GmmGttExt.h"
 
 #ifdef GMM_LIB_DLL
 #ifdef _WIN32
@@ -540,6 +539,8 @@ namespace GmmLib
 
 
     #endif
+    private: 
+        void GMM_STDCALL OverrideSkuWa();
     };
 } //namespace
 

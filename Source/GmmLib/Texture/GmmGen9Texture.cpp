@@ -45,7 +45,7 @@ GMM_GFX_SIZE_T GmmLib::GmmGen9TextureCalc::Get1DTexOffsetAddressPerMip(GMM_TEXTU
     MipWidth = GFX_ULONG_CAST(pTexInfo->BaseWidth);
 
     __MipLevel =
-    (pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) ?
+    (pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) ?
     GFX_MIN(MipLevel, pTexInfo->Alignment.MipTailStartLod) :
     MipLevel;
 
@@ -68,7 +68,7 @@ GMM_GFX_SIZE_T GmmLib::GmmGen9TextureCalc::Get1DTexOffsetAddressPerMip(GMM_TEXTU
 
     MipOffset *= (pTexInfo->BitsPerPixel >> 3);
 
-    if((pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) &&
+    if((pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) &&
        (MipLevel >= pTexInfo->Alignment.MipTailStartLod))
     {
         MipOffset += GetMipTailByteOffset(pTexInfo, MipLevel);
@@ -129,12 +129,12 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmGen9TextureCalc::FillTex1D(GMM_TEXTURE_INFO * 
     __GMM_ASSERTPTR(pRestrictions, GMM_ERROR);
     __GMM_ASSERT(pTexInfo->Flags.Info.Linear ||
                  pTexInfo->Flags.Info.TiledYf ||
-                 pTexInfo->Flags.Info.TiledYs);
+                 GMM_IS_64KB_TILE(pTexInfo->Flags));
 
     pTexInfo->Flags.Info.Linear = 1;
     pTexInfo->Flags.Info.TiledW = 0;
     pTexInfo->Flags.Info.TiledX = 0;
-    pTexInfo->Flags.Info.TiledY = 0;
+    GMM_SET_4KB_TILE(pTexInfo->Flags, 0);
 
     const GMM_PLATFORM_INFO *pPlatform = GMM_OVERRIDE_PLATFORM_INFO(pTexInfo);
 
@@ -145,7 +145,7 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmGen9TextureCalc::FillTex1D(GMM_TEXTURE_INFO * 
     Compressed = GmmIsCompressed(pTexInfo->Format);
     GetCompressionBlockDimensions(pTexInfo->Format, &CompressWidth, &CompressHeight, &CompressDepth);
 
-    if(pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs)
+    if(pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags))
     {
         FindMipTailStartLod(pTexInfo);
     }
@@ -157,7 +157,7 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmGen9TextureCalc::FillTex1D(GMM_TEXTURE_INFO * 
     Width    = __GMM_EXPAND_WIDTH(this, GFX_ULONG_CAST(pTexInfo->BaseWidth), HAlign, pTexInfo);
     MipWidth = Width;
 
-    if((pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) &&
+    if((pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) &&
        ((pTexInfo->Alignment.MipTailStartLod == 0) || (pTexInfo->MaxLod == 0)))
     {
         // Do nothing. Width is already aligned.
@@ -168,7 +168,7 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmGen9TextureCalc::FillTex1D(GMM_TEXTURE_INFO * 
         {
             uint32_t AlignedMipWidth;
 
-            if((pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) &&
+            if((pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) &&
                (i == pTexInfo->Alignment.MipTailStartLod))
             {
                 Width += pPlatform->TileInfo[pTexInfo->TileMode].LogicalTileWidth;
@@ -387,7 +387,7 @@ uint32_t GmmLib::GmmGen9TextureCalc::Get2DMipMapTotalHeight(GMM_TEXTURE_INFO *pT
     VAlign    = pTexInfo->Alignment.VAlign;
 
     MipLevel =
-    (pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) ?
+    (pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) ?
     GFX_MIN(MipLevel, pTexInfo->Alignment.MipTailStartLod) :
     MipLevel;
 
@@ -462,7 +462,7 @@ GMM_GFX_SIZE_T GmmLib::GmmGen9TextureCalc::Get2DTexOffsetAddressPerMip(GMM_TEXTU
     GetCompressionBlockDimensions(pTexInfo->Format, &CompressWidth, &CompressHeight, &CompressDepth);
 
     __MipLevel =
-    (pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) ?
+    (pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) ?
     GFX_MIN(MipLevel, pTexInfo->Alignment.MipTailStartLod) :
     MipLevel;
 
@@ -533,7 +533,7 @@ GMM_GFX_SIZE_T GmmLib::GmmGen9TextureCalc::Get2DTexOffsetAddressPerMip(GMM_TEXTU
 
     MipOffset += OffsetHeight * GFX_ULONG_CAST(pTexInfo->Pitch);
 
-    if((pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) &&
+    if((pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) &&
        (MipLevel >= pTexInfo->Alignment.MipTailStartLod))
     {
         MipOffset += GetMipTailByteOffset(pTexInfo, MipLevel);
@@ -1153,4 +1153,88 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmGen9TextureCalc::FillTexCube(GMM_TEXTURE_INFO 
                                                                __GMM_BUFFER_TYPE *pRestrictions)
 {
     return FillTex2D(pTexInfo, pRestrictions);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////
+/// This function does any special-case conversion from client-provided pseudo creation
+/// parameters to actual parameters for CCS.
+///
+/// @param[in]  pTexInfo: Reference to ::GMM_TEXTURE_INFO
+///
+/// @return     ::GMM_STATUS
+/////////////////////////////////////////////////////////////////////////////////////
+GMM_STATUS GMM_STDCALL GmmLib::GmmGen9TextureCalc::MSAACCSUsage(GMM_TEXTURE_INFO *pTexInfo)
+{
+    GMM_STATUS Status = GMM_SUCCESS;
+
+    if(pTexInfo->MSAA.NumSamples > 1) // CCS for MSAA Compression
+    {
+        Status = MSAACompression(pTexInfo);
+    }
+    else // Non-MSAA CCS Use (i.e. Render Target Fast Clear)
+    {
+        if(!pTexInfo->Flags.Info.TiledW &&
+           (!pTexInfo->Flags.Info.TiledX) &&
+           ((!pTexInfo->Flags.Info.Linear) ||
+            (GMM_IS_4KB_TILE(pTexInfo->Flags) || GMM_IS_64KB_TILE(pTexInfo->Flags) ||
+             (pTexInfo->Type == RESOURCE_BUFFER && pTexInfo->Flags.Info.Linear))) && //!Yf - deprecate Yf
+           ((pTexInfo->BitsPerPixel == 32) ||
+            (pTexInfo->BitsPerPixel == 64) ||
+            (pTexInfo->BitsPerPixel == 128)))
+        {
+            // For non-MSAA CCS usage, the four tables of
+            // requirements:
+            // (1) RT Alignment (GMM Don't Care: Occurs Naturally)
+            // (2) ClearRect Alignment
+            // (3) ClearRect Scaling (GMM Don't Care: GHAL3D Matter)
+            // (4) Non-MSAA CCS Sizing
+
+            // Gen8+:
+            // Since mip-mapped and arrayed surfaces are supported, we
+            // deal with alignment later at per mip level. Here, we set
+            // tiling type only. TileX is not supported on Gen9+.
+            // Pre-Gen8:
+            // (!) For all the above, there are separate entries for
+            // 32/64/128bpp--and then deals with PIXEL widths--Here,
+            // though, we will unify by considering 8bpp table entries
+            // (unlisted--i.e. do the math)--and deal with BYTE widths.
+
+            // (1) RT Alignment -- The surface width and height don't
+            // need to be padded to RT CL granularity. On HSW, all tiled
+            // RT's will have appropriate alignment (given 4KB surface
+            // base and no mip-map support) and appropriate padding
+            // (due to tile padding). On BDW+, GMM uses H/VALIGN that
+            // will guarantee the MCS RT alignment for all subresources.
+
+            // (2) ClearRect Alignment -- I.e. FastClears must be done
+            // with certain granularity:
+            //  TileY:  512 Bytes x 128 Lines
+            //  TileX: 1024 Bytes x  64 Lines
+            // So a CCS must be sized to match that granularity (though
+            // the RT itself need not be fully padded to that
+            // granularity to use FastClear).
+
+            // (4) Non-MSAA CCS Sizing -- CCS sizing is based on the
+            // size of the FastClear (with granularity padding) for the
+            // paired RT. CCS's (byte widths and heights) are scaled
+            // down from their RT's by:
+            //  TileY: 32 x 32
+            //  TileX: 64 x 16
+
+            // ### Example #############################################
+            // RT:         800x600, 32bpp, TileY
+            // 8bpp:      3200x600
+            // FastClear: 3584x640 (for TileY FastClear Granularity of 512x128)
+            // CCS:       112x20 (for TileY RT:CCS Sizing Downscale of 32x32)
+
+            pTexInfo->Flags.Gpu.__NonMsaaTileYCcs = pTexInfo->Flags.Info.TiledY || pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs;
+            pTexInfo->Flags.Gpu.__NonMsaaTileXCcs = pTexInfo->Flags.Info.TiledX;
+        }
+        else
+        {
+            GMM_ASSERTDPF(0, "Illegal CCS creation parameters!");
+            Status = GMM_ERROR;
+        }
+    }
+    return Status;
 }

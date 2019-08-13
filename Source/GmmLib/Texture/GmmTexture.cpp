@@ -289,6 +289,20 @@ void GmmLib::GmmTextureCalc::FillPlanarOffsetAddress(GMM_TEXTURE_INFO *pTexInfo)
         }
     }
 
+    //Special case LKF MMC compressed surfaces
+    if(pTexInfo->Flags.Gpu.MMC &&
+       pTexInfo->Flags.Gpu.UnifiedAuxSurface &&
+       GMM_IS_4KB_TILE(pTexInfo->Flags))
+    {
+        GMM_GFX_SIZE_T TileHeight = pGmmGlobalContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileHeight;
+        GMM_GFX_SIZE_T TileWidth  = pGmmGlobalContext->GetPlatformInfo().TileInfo[pTexInfo->TileMode].LogicalTileWidth;
+
+        *pUOffsetX = GFX_ALIGN(*pUOffsetX, TileWidth);
+        *pUOffsetY = GFX_ALIGN(*pUOffsetY, TileHeight);
+        *pVOffsetX = GFX_ALIGN(*pVOffsetX, TileWidth);
+        *pVOffsetY = GFX_ALIGN(*pVOffsetY, TileHeight);
+    }
+
     GMM_DPF_EXIT;
 
 #undef SWAP_UV
@@ -370,7 +384,7 @@ void GmmLib::GmmTextureCalc::FindMipTailStartLod(GMM_TEXTURE_INFO *pTexInfo)
 {
     GMM_DPF_ENTER;
 
-    if(!(pTexInfo->Flags.Info.TiledYf || pTexInfo->Flags.Info.TiledYs) ||
+    if(!(pTexInfo->Flags.Info.TiledYf || GMM_IS_64KB_TILE(pTexInfo->Flags)) ||
        (pTexInfo->MaxLod == 0) ||
        (pTexInfo->Flags.Wa.DisablePackedMipTail))
     {
@@ -508,7 +522,7 @@ bool GmmLib::GmmTextureCalc::GmmGetD3DToHwTileConversion(GMM_TEXTURE_INFO *pTexI
         *pColFactor = 1;
         *pRowFactor = 1;
     }
-    else if(pTexInfo->Flags.Info.TiledY)
+    else if(GMM_IS_4KB_TILE(pTexInfo->Flags))
     {
         // Logic for non-MSAA
         {
