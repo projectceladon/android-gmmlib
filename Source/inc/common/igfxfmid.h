@@ -65,11 +65,14 @@ typedef enum {
     IGFX_LAKEFIELD,
     IGFX_JASPERLAKE,
     IGFX_ELKHARTLAKE     =IGFX_JASPERLAKE,
+
     IGFX_TIGERLAKE_LP,
+    IGFX_ROCKETLAKE,
+    IGFX_ALDERLAKE_S,
+
     IGFX_DG1             = 1210,
+
     IGFX_MAX_PRODUCT,
-
-
     IGFX_GENNEXT               = 0x7ffffffe,
     PRODUCT_FAMILY_FORCE_ULONG = 0x7fffffff
 } PRODUCT_FAMILY;
@@ -95,6 +98,7 @@ typedef enum {
     PCH_CMP_H,          // CML Halo PCH
     PCH_CMP_V,          // CML V PCH
     PCH_JSP_N,          // JSL N PCH Device IDs for JSL+ Rev02
+    PCH_ADL_S,          // ADL_S PCH
     PCH_PRODUCT_FAMILY_FORCE_ULONG = 0x7fffffff
 } PCH_PRODUCT_FAMILY;
 
@@ -1191,6 +1195,16 @@ typedef enum __NATIVEGTTYPE
 #define DEV_ID_9A7F                             0x9A7F
 
 #define DEV_ID_4905                             0x4905
+#define DEV_ID_4906                             0x4906
+#define DEV_ID_4907                             0x4907
+
+// Rocketlake
+#define DEV_ID_4C80                             0x4C80
+#define DEV_ID_4C8A                             0x4C8A
+#define DEV_ID_4C8B                             0x4C8B
+#define DEV_ID_4C8C                             0x4C8C
+#define DEV_ID_4C90                             0x4C90
+#define DEV_ID_4C9A                             0x4C9A
 
 //LKF
 #define ILKF_1x8x8_DESK_DEVICE_F0_ID            0x9840
@@ -1207,10 +1221,33 @@ typedef enum __NATIVEGTTYPE
 #define IEHL_1x4x4_DEVICE_A0_ID                 0x4551
 #define IEHL_1x4x8_DEVICE_A0_ID                 0x4571
 
+#define DEV_ID_4500                             0x4500
+#define DEV_ID_4541                             0x4541
+#define DEV_ID_4551                             0x4551
+#define DEV_ID_4571                             0x4571
+#define DEV_ID_4555                             0x4555
+
 //JSL+ Rev02
 #define IJSL_1x4x4_DEVICE_B0_ID                 0x4E51
 #define IJSL_1x4x6_DEVICE_B0_ID                 0x4E61
 #define IJSL_1x4x8_DEVICE_B0_ID                 0x4E71
+
+#define DEV_ID_4E51                             0x4E51
+#define DEV_ID_4E61                             0x4E61
+#define DEV_ID_4E71                             0x4E71
+#define DEV_ID_4E55                             0x4E55
+
+//ADL-S PCH Device IDs
+#define DEV_ID_4680                             0x4680
+#define DEV_ID_4681                             0x4681
+#define DEV_ID_4682                             0x4682
+#define DEV_ID_4683                             0x4683
+#define DEV_ID_4690                             0x4690
+#define DEV_ID_4691                             0x4691
+#define DEV_ID_4692                             0x4692
+#define DEV_ID_4693                             0x4693
+#define DEV_ID_4698                             0x4698
+#define DEV_ID_4699                             0x4699
 
 //ICL PCH LP Device IDs
 #define ICP_LP_RESERVED_FUSE_ID                 0x3480

@@ -55,6 +55,7 @@ uint8_t GMM_STDCALL GmmLib::GmmResourceInfoCommon::Is64KBPageSuitable()
     if(pGmmGlobalContext->GetSkuTable().FtrLocalMemory)
     {
         Ignore64KBPadding |= (Surf.Flags.Info.NonLocalOnly || (Surf.Flags.Info.Shared && !Surf.Flags.Info.NotLockable));
+        Ignore64KBPadding |= (pGmmGlobalContext->GetSkuTable().FtrLocalMemoryAllows4KB && Surf.Flags.Info.NoOptimizationPadding);
     }
     else
     {
@@ -346,7 +347,8 @@ GMM_STATUS GMM_STDCALL GmmLib::GmmResourceInfoCommon::Create(Context &GmmLibCont
 
     if(Is64KBPageSuitable() && pGmmGlobalContext->GetSkuTable().FtrLocalMemory)
     {
-        Surf.Alignment.BaseAlignment = GMM_KBYTE(64);
+        // BaseAlignment can be greater than 64KB and needs to be aligned to 64KB
+        Surf.Alignment.BaseAlignment = GFX_MAX(GFX_ALIGN(Surf.Alignment.BaseAlignment, GMM_KBYTE(64)), GMM_KBYTE(64));
     }
 
     GMM_DPF_EXIT;
